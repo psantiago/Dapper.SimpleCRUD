@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data;
 using System.Diagnostics;
 using System.Linq;
@@ -319,6 +318,25 @@ namespace Dapper
         /// <returns>The ID (primary key) of the newly inserted record if it is identity using the defined type, otherwise null</returns>
         public static TKey Insert<TKey>(this IDbConnection connection, object entityToInsert, IDbTransaction transaction = null, int? commandTimeout = null)
         {
+            return Insert<TKey, object>(connection, entityToInsert, transaction, commandTimeout);
+        }
+
+        /// <summary>
+        /// <para>Inserts a row into the database, using ONLY the properties defined by TEntity</para>
+        /// <para>By default inserts into the table matching the class name</para>
+        /// <para>-Table name can be overridden by adding an attribute on your class [Table("YourTableName")]</para>
+        /// <para>Insert filters out Id column and any columns with the [Key] attribute</para>
+        /// <para>Properties marked with attribute [Editable(false)] and complex types are ignored</para>
+        /// <para>Supports transaction and command timeout</para>
+        /// <para>Returns the ID (primary key) of the newly inserted record if it is identity using the defined type, otherwise null</para>
+        /// </summary>
+        /// <param name="connection"></param>
+        /// <param name="entityToInsert"></param>
+        /// <param name="transaction"></param>
+        /// <param name="commandTimeout"></param>
+        /// <returns>The ID (primary key) of the newly inserted record if it is identity using the defined type, otherwise null</returns>
+        public static TKey Insert<TKey, TEntity>(this IDbConnection connection, TEntity entityToInsert, IDbTransaction transaction = null, int? commandTimeout = null)
+        {
             var idProps = GetIdProperties(entityToInsert).ToList();
 
             if (!idProps.Any())
@@ -397,6 +415,25 @@ namespace Dapper
         /// <param name="commandTimeout"></param>
         /// <returns>The number of effected records</returns>
         public static int Update(this IDbConnection connection, object entityToUpdate, IDbTransaction transaction = null, int? commandTimeout = null)
+        {
+            return UpdateGeneric(connection, entityToUpdate, transaction, commandTimeout);
+        }
+        
+        /// <summary>
+        /// <para>Updates a record or records in the database with only the properties of TEntity</para>
+        /// <para>By default updates records in the table matching the class name</para>
+        /// <para>-Table name can be overridden by adding an attribute on your class [Table("YourTableName")]</para>
+        /// <para>Updates records where the Id property and properties with the [Key] attribute match those in the database.</para>
+        /// <para>Properties marked with attribute [Editable(false)] and complex types are ignored</para>
+        /// <para>Supports transaction and command timeout</para>
+        /// <para>Returns number of rows effected</para>
+        /// </summary>
+        /// <param name="connection"></param>
+        /// <param name="entityToUpdate"></param>
+        /// <param name="transaction"></param>
+        /// <param name="commandTimeout"></param>
+        /// <returns>The number of effected records</returns>
+        public static int UpdateGeneric<TEntity>(this IDbConnection connection, TEntity entityToUpdate, IDbTransaction transaction = null, int? commandTimeout = null)
         {
             var idProps = GetIdProperties(entityToUpdate).ToList();
 
@@ -632,7 +669,7 @@ namespace Dapper
         }
 
         //build update statement based on list on an entity
-        private static void BuildUpdateSet(object entityToUpdate, StringBuilder sb)
+        private static void BuildUpdateSet<T>(T entityToUpdate, StringBuilder sb)
         {
             var nonIdProps = GetUpdateableProperties(entityToUpdate).ToArray();
 
@@ -707,7 +744,7 @@ namespace Dapper
         //Not marked with the [Key] attribute (without required attribute)
         //Not marked with [IgnoreInsert]
         //Not marked with [NotMapped]
-        private static void BuildInsertValues(object entityToInsert, StringBuilder sb)
+        private static void BuildInsertValues<T>(T entityToInsert, StringBuilder sb)
         {
             var props = GetScaffoldableProperties(entityToInsert).ToArray();
             for (var i = 0; i < props.Count(); i++)
@@ -738,7 +775,7 @@ namespace Dapper
         //marked with [IgnoreInsert]
         //named Id
         //marked with [NotMapped]
-        private static void BuildInsertParameters(object entityToInsert, StringBuilder sb)
+        private static void BuildInsertParameters<T>(T entityToInsert, StringBuilder sb)
         {
             var props = GetScaffoldableProperties(entityToInsert).ToArray();
 
@@ -764,16 +801,20 @@ namespace Dapper
         }
 
         //Get all properties in an entity
-        private static IEnumerable<PropertyInfo> GetAllProperties(object entity)
+        private static IEnumerable<PropertyInfo> GetAllProperties<T>(T entity) where T : class
         {
-            if (entity == null) entity = new { };
+            if (entity == null) return new PropertyInfo[0];
             return entity.GetType().GetProperties();
         }
 
         //Get all properties that are not decorated with the Editable(false) attribute
-        private static IEnumerable<PropertyInfo> GetScaffoldableProperties(object entity)
+        private static IEnumerable<PropertyInfo> GetScaffoldableProperties<T>(T entity)
         {
-            var props = entity.GetType().GetProperties().Where(p => p.GetCustomAttributes(true).Any(attr => attr.GetType().Name == typeof(EditableAttribute).Name && !IsEditable(p)) == false);
+            IEnumerable<PropertyInfo> props = typeof(T) == typeof(object) ? entity.GetType().GetProperties() : typeof(T).GetProperties();
+
+            props = props.Where(p => p.GetCustomAttributes(true).Any(attr => attr.GetType().Name == typeof(EditableAttribute).Name && !IsEditable(p)) == false);
+
+
             return props.Where(p => p.PropertyType.IsSimpleType() || IsEditable(p));
         }
 
@@ -818,7 +859,7 @@ namespace Dapper
         //Not marked ReadOnly
         //Not marked IgnoreInsert
         //Not marked NotMapped
-        private static IEnumerable<PropertyInfo> GetUpdateableProperties(object entity)
+        private static IEnumerable<PropertyInfo> GetUpdateableProperties<T>(T entity)
         {
             var updateableProperties = GetScaffoldableProperties(entity);
             //remove ones with ID

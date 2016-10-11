@@ -4,8 +4,8 @@ using System.Data;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Win32.SafeHandles;
 
 namespace Dapper
 {
@@ -237,7 +237,26 @@ namespace Dapper
         /// <param name="transaction"></param>
         /// <param name="commandTimeout"></param>
         /// <returns>The ID (primary key) of the newly inserted record if it is identity using the defined type, otherwise null</returns>
-        public static async Task<TKey> InsertAsync<TKey>(this IDbConnection connection, object entityToInsert, IDbTransaction transaction = null, int? commandTimeout = null)
+        public static Task<TKey> InsertAsync<TKey>(this IDbConnection connection, object entityToInsert, IDbTransaction transaction = null, int? commandTimeout = null)
+        {
+            return InsertAsync<TKey, object>(connection, entityToInsert, transaction, commandTimeout);
+        }
+
+        /// <summary>
+        /// <para>Inserts a row into the database, using ONLY the properties defined by TEntity</para>
+        /// <para>By default inserts into the table matching the class name</para>
+        /// <para>-Table name can be overridden by adding an attribute on your class [Table("YourTableName")]</para>
+        /// <para>Insert filters out Id column and any columns with the [Key] attribute</para>
+        /// <para>Properties marked with attribute [Editable(false)] and complex types are ignored</para>
+        /// <para>Supports transaction and command timeout</para>
+        /// <para>Returns the ID (primary key) of the newly inserted record if it is identity using the defined type, otherwise null</para>
+        /// </summary>
+        /// <param name="connection"></param>
+        /// <param name="entityToInsert"></param>
+        /// <param name="transaction"></param>
+        /// <param name="commandTimeout"></param>
+        /// <returns>The ID (primary key) of the newly inserted record if it is identity using the defined type, otherwise null</returns>
+        public static async Task<TKey> InsertAsync<TKey, TEntity>(this IDbConnection connection, TEntity entityToInsert, IDbTransaction transaction = null, int? commandTimeout = null)
         {
             var idProps = GetIdProperties(entityToInsert).ToList();
 
@@ -316,6 +335,25 @@ namespace Dapper
         /// <param name="commandTimeout"></param>
         /// <returns>The number of effected records</returns>
         public static Task<int> UpdateAsync(this IDbConnection connection, object entityToUpdate, IDbTransaction transaction = null, int? commandTimeout = null, System.Threading.CancellationToken? token = null)
+        {
+            return UpdateGenericAsync(connection, entityToUpdate, transaction, commandTimeout, token);
+        }
+        
+        /// <summary>
+        ///  <para>Updates a record or records in the database asynchronously</para>
+        ///  <para>By default updates records in the table matching the class name</para>
+        ///  <para>-Table name can be overridden by adding an attribute on your class [Table("YourTableName")]</para>
+        ///  <para>Updates records where the Id property and properties with the [Key] attribute match those in the database.</para>
+        ///  <para>Properties marked with attribute [Editable(false)] and complex types are ignored</para>
+        ///  <para>Supports transaction and command timeout</para>
+        ///  <para>Returns number of rows effected</para>
+        ///  </summary>
+        ///  <param name="connection"></param>
+        ///  <param name="entityToUpdate"></param>
+        /// <param name="transaction"></param>
+        /// <param name="commandTimeout"></param>
+        /// <returns>The number of effected records</returns>
+        public static Task<int> UpdateGenericAsync<TEntity>(this IDbConnection connection, TEntity entityToUpdate, IDbTransaction transaction = null, int? commandTimeout = null, System.Threading.CancellationToken? token = null)
         {
             var idProps = GetIdProperties(entityToUpdate).ToList();
 

@@ -12,13 +12,18 @@ using Npgsql;
 namespace Dapper.SimpleCRUDTests
 {
     #region DTOClasses
-    //For .Net 4.5> [System.ComponentModel.DataAnnotations.Schema.Table("Users")]  or the attribute built into SimpleCRUD
     [Table("Users")]
-    public class User
+    public class UserEditableSettings
     {
         public int Id { get; set; }
         public string Name { get; set; }
         public int Age { get; set; }
+    }
+
+    //For .Net 4.5> [System.ComponentModel.DataAnnotations.Schema.Table("Users")]  or the attribute built into SimpleCRUD
+    [Table("Users")]
+    public class User : UserEditableSettings
+{
         //we modified so enums were automatically handled, we should also automatically handle nullable enums
         public DayOfWeek? ScheduledDayOff { get; set; }
 
@@ -187,7 +192,6 @@ namespace Dapper.SimpleCRUDTests
             using (var connection = GetOpenConnection())
             {
                 var id = connection.Insert(new User { Name = "User1", Age = 10 });
-                id.IsEqualTo(1);
                 connection.Delete<User>(id);
 
             }
@@ -198,9 +202,92 @@ namespace Dapper.SimpleCRUDTests
             using (var connection = GetOpenConnection())
             {
                 var id = connection.Insert<long>(new BigCar { Make = "Big", Model = "Car" });
-                id.IsEqualTo(2147483650);
                 connection.Delete<BigCar>(id);
 
+            }
+        }
+
+        /// <summary>
+        /// This validates that the object based insert behavior was not changed by adding a generic overload.
+        /// </summary>
+        public void TestInsertUsingObjectLimitedFields()
+        {
+            using (var connection = GetOpenConnection())
+            {
+                //arrange
+                var user = new User { Name = "User1", Age = 10, ScheduledDayOff = DayOfWeek.Friday };
+                var userAsEditableSettings = (UserEditableSettings)user;
+                var id = connection.Insert(userAsEditableSettings);
+
+                //act
+                var insertedUser = connection.Get<User>(id);
+
+                //assert
+                insertedUser.ScheduledDayOff.IsEqualTo(DayOfWeek.Friday);
+
+                connection.Delete<User>(id);
+            }
+        }
+
+        public void TestInsertUsingGenericLimitedFields()
+        {
+            using (var connection = GetOpenConnection())
+            {
+                //arrange
+                var user = new User {Name = "User1", Age = 10, ScheduledDayOff = DayOfWeek.Friday};
+
+                //act
+                var id = connection.Insert<int?, UserEditableSettings>(user);
+
+                //assert
+                var insertedUser = connection.Get<User>(id);
+                insertedUser.ScheduledDayOff.IsNull();
+
+                connection.Delete<User>(id);
+            }
+        }
+
+        /// <summary>
+        /// This validates that the object based insert behavior was not changed by adding a generic overload.
+        /// </summary>
+        public void TestInsertUsingObjectLimitedFieldsAsync()
+        {
+            using (var connection = GetOpenConnection())
+            {
+                //arrange
+                var user = new User { Name = "User1", Age = 10, ScheduledDayOff = DayOfWeek.Friday };
+                var userAsEditableSettings = (UserEditableSettings)user;
+                var idTask = connection.InsertAsync(userAsEditableSettings);
+                idTask.Wait();
+                var id = idTask.Result;
+
+                //act
+                var insertedUser = connection.Get<User>(id);
+
+                //assert
+                insertedUser.ScheduledDayOff.IsEqualTo(DayOfWeek.Friday);
+
+                connection.Delete<User>(id);
+            }
+        }
+
+        public void TestInsertUsingGenericLimitedFieldsAsync()
+        {
+            using (var connection = GetOpenConnection())
+            {
+                //arrange
+                var user = new User { Name = "User1", Age = 10, ScheduledDayOff = DayOfWeek.Friday };
+
+                //act
+                var idTask = connection.InsertAsync<int?, UserEditableSettings>(user);
+                idTask.Wait();
+                var id = idTask.Result;
+
+                //assert
+                var insertedUser = connection.Get<User>(id);
+                insertedUser.ScheduledDayOff.IsNull();
+
+                connection.Delete<User>(id);
             }
         }
 
@@ -424,6 +511,122 @@ namespace Dapper.SimpleCRUDTests
                 var updateditem = connection.Get<Car>(newid);
                 updateditem.Make.IsEqualTo("Toyota");
                 connection.Delete<Car>(newid);
+            }
+        }
+
+        /// <summary>
+        /// We expect (using the old update logic) that scheduled day off will be updated,
+        /// even though it's not a property of UserEditableSettings, since the actual object is of type 'User',
+        /// which does have that property.
+        /// </summary>
+        public void TestUpdateUsingObjectLimitedFields()
+        {
+            using (var connection = GetOpenConnection())
+            {
+                //arrange
+                var user = new User { Name = "User1", Age = 10, ScheduledDayOff = DayOfWeek.Friday };
+                user.Id = connection.Insert(user) ?? 0;
+
+                user.ScheduledDayOff = DayOfWeek.Thursday;
+                var userAsEditableSettings = (UserEditableSettings)user;
+                userAsEditableSettings.Name = "User++";
+
+                connection.Update(userAsEditableSettings);
+
+                //act
+                var insertedUser = connection.Get<User>(user.Id);
+
+                //assert
+                insertedUser.Name.IsEqualTo("User++");
+                insertedUser.ScheduledDayOff.IsEqualTo(DayOfWeek.Thursday);
+
+                connection.Delete<User>(user.Id);
+            }
+        }
+
+        /// <summary>
+        /// We expect scheduled day off to NOT be updated, since it's not a property of UserEditableSettings
+        /// </summary>
+        public void TestUpdateUsingGenericLimitedFields()
+        {
+            using (var connection = GetOpenConnection())
+            {
+                //arrange
+                var user = new User { Name = "User1", Age = 10, ScheduledDayOff = DayOfWeek.Friday };
+                user.Id = connection.Insert(user) ?? 0;
+
+                user.ScheduledDayOff = DayOfWeek.Thursday;
+                var userAsEditableSettings = (UserEditableSettings)user;
+                userAsEditableSettings.Name = "User++";
+
+                connection.UpdateGeneric(userAsEditableSettings);
+
+                //act
+                var insertedUser = connection.Get<User>(user.Id);
+
+                //assert
+                insertedUser.Name.IsEqualTo("User++");
+                insertedUser.ScheduledDayOff.IsEqualTo(DayOfWeek.Friday);
+
+                connection.Delete<User>(user.Id);
+            }
+        }
+        
+        /// <summary>
+        /// We expect (using the old update logic) that scheduled day off will be updated,
+        /// even though it's not a property of UserEditableSettings, since the actual object is of type 'User',
+        /// which does have that property.
+        /// </summary>
+        public void TestUpdateUsingObjectLimitedFieldsAsync()
+        {
+            using (var connection = GetOpenConnection())
+            {
+                //arrange
+                var user = new User { Name = "User1", Age = 10, ScheduledDayOff = DayOfWeek.Friday };
+                user.Id = connection.Insert(user) ?? 0;
+
+                user.ScheduledDayOff = DayOfWeek.Thursday;
+                var userAsEditableSettings = (UserEditableSettings)user;
+                userAsEditableSettings.Name = "User++";
+
+                connection.UpdateAsync(userAsEditableSettings).Wait();
+
+                //act
+                var insertedUser = connection.Get<User>(user.Id);
+
+                //assert
+                insertedUser.Name.IsEqualTo("User++");
+                insertedUser.ScheduledDayOff.IsEqualTo(DayOfWeek.Thursday);
+
+                connection.Delete<User>(user.Id);
+            }
+        }
+
+        /// <summary>
+        /// We expect scheduled day off to NOT be updated, since it's not a property of UserEditableSettings
+        /// </summary>
+        public void TestUpdateUsingGenericLimitedFieldsAsync()
+        {
+            using (var connection = GetOpenConnection())
+            {
+                //arrange
+                var user = new User { Name = "User1", Age = 10, ScheduledDayOff = DayOfWeek.Friday };
+                user.Id = connection.Insert(user) ?? 0;
+
+                user.ScheduledDayOff = DayOfWeek.Thursday;
+                var userAsEditableSettings = (UserEditableSettings)user;
+                userAsEditableSettings.Name = "User++";
+
+                connection.UpdateGenericAsync(userAsEditableSettings).Wait();
+
+                //act
+                var insertedUser = connection.Get<User>(user.Id);
+
+                //assert
+                insertedUser.Name.IsEqualTo("User++");
+                insertedUser.ScheduledDayOff.IsEqualTo(DayOfWeek.Friday);
+
+                connection.Delete<User>(user.Id);
             }
         }
 
