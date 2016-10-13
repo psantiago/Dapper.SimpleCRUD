@@ -43,7 +43,7 @@ namespace Dapper
             var sb = new StringBuilder();
             sb.Append("Select ");
             //create a new empty instance of the type to get the base properties
-            BuildSelect(sb, GetScaffoldableProperties((T)Activator.CreateInstance(typeof(T))).ToArray());
+            BuildSelect(sb, GetScaffoldableProperties<T>().ToArray());
             sb.AppendFormat(" from {0}", name);
             sb.Append(" where " + GetColumnName(onlyKey) + " = @Id");
 
@@ -84,7 +84,7 @@ namespace Dapper
             var whereprops = GetAllProperties(whereConditions).ToArray();
             sb.Append("Select ");
             //create a new empty instance of the type to get the base properties
-            BuildSelect(sb, GetScaffoldableProperties((T)Activator.CreateInstance(typeof(T))).ToArray());
+            BuildSelect(sb, GetScaffoldableProperties<T>().ToArray());
             sb.AppendFormat(" from {0}", name);
 
             if (whereprops.Any())
@@ -127,7 +127,7 @@ namespace Dapper
             var whereprops = GetAllProperties(conditions).ToArray();
             sb.Append("Select ");
             //create a new empty instance of the type to get the base properties
-            BuildSelect(sb, GetScaffoldableProperties((T)Activator.CreateInstance(typeof(T))).ToArray());
+            BuildSelect(sb, GetScaffoldableProperties<T>().ToArray());
             sb.AppendFormat(" from {0}", name);
 
             sb.Append(" " + conditions);
@@ -188,7 +188,7 @@ namespace Dapper
             }
 
             //create a new empty instance of the type to get the base properties
-            BuildSelect(sb, GetScaffoldableProperties((T)Activator.CreateInstance(typeof(T))).ToArray());
+            BuildSelect(sb, GetScaffoldableProperties<T>().ToArray());
             query = query.Replace("{SelectColumns}", sb.ToString());
             query = query.Replace("{TableName}", name);
             query = query.Replace("{PageNumber}", pageNumber.ToString());
@@ -258,11 +258,11 @@ namespace Dapper
             var sb = new StringBuilder();
             sb.AppendFormat("insert into {0}", name);
             sb.Append(" (");
-            BuildInsertParameters(entityToInsert, sb);
+            BuildInsertParameters<TEntity>(sb);
             sb.Append(") ");
             sb.Append("values");
             sb.Append(" (");
-            BuildInsertValues(entityToInsert, sb);
+            BuildInsertValues<TEntity>(sb);
             sb.Append(")");
 
             if (keytype == typeof(Guid))
